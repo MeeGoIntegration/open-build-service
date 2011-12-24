@@ -3746,6 +3746,9 @@ sub getfilelist {
   $ret->{'rev'} = $rev->{'rev'} if exists $rev->{'rev'};
   $ret->{'vrev'} = $rev->{'vrev'} if exists $rev->{'vrev'};
   $ret->{'serviceinfo'} = $serviceinfo if $serviceinfo;
+  $ret->{'mrev'} = $rev->{'mrev'} if exists $rev->{'mrev'};
+  $ret->{'vcscommitid'} = $rev->{'vcscommitid'} if exists $rev->{'vcscommitid'};
+
   my @res;
   for my $filename (sort keys %$files) {
     my @s = repstat($rev, $filename, $files->{$filename});
