@@ -1991,7 +1991,7 @@ class SourceController < ApplicationController
     package_name = params[:package]
 
     path = request.path
-    path << build_query_from_hash(params, [:cmd, :user, :comment, :rev, :linkrev, :keeplink, :repairlink])
+    path << build_query_from_hash(params, [:cmd, :user, :comment, :rev, :linkrev, :keeplink, :repairlink, :vcscommitid])
     answer = pass_to_backend path
     
     pack = DbPackage.find_by_project_and_name( params[:project], params[:package] )

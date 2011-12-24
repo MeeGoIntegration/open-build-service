@@ -585,6 +585,8 @@ our $revision = [
 	'user',
 	'comment',
 	'requestid',
+	'mrev',
+	'vcscommitid'
 ];
 
 our $revisionlist = [

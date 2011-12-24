@@ -81,7 +81,7 @@ my $sourcedb = "$BSConfig::bsdir/db/source";
 
 my $remotecache = "$BSConfig::bsdir/remotecache";
 
-my $srcrevlay = [qw{rev vrev srcmd5 version time user comment requestid}];
+my $srcrevlay = [qw{rev vrev srcmd5 version time user comment requestid mrev vcscommitid}];
 my $eventlay = [qw{number time type project package repository arch}];
 
 my $ajaxsocket = "$rundir/bs_srcserver.ajax";
@@ -1020,6 +1020,15 @@ sub addrev {
       $l_new = $1 if $rev->{'vrev'} =~ /(\d+)$/;
       $rev->{'vrev'} =~ s/\d+$/$l_old + 1/e if $l_old + 1 > $l_new;
     }
+  }
+
+  # store the current pkg _meta revision
+  my $meta = getrev_meta($projid, $packid);
+  $rev->{'mrev'} = $meta->{'rev'};
+
+  # store the vcs commit id if provided
+  if ($cgi->{'vcscommitid'}) {
+    $rev->{'vcscommitid'} = str2utf8xml($cgi->{'vcscommitid'});
   }
 
   # add to revision database
