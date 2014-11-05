@@ -3952,18 +3952,25 @@ sub checkaggregate {
     } else {
       @apackids = sort keys(%{($projpacks->{$aprojid} || {})->{'package'} || {}});
     }
+
+    my @aarchs = ($myarch);
+    if ($aggregate->{'arch'}) {
+      @aarchs = @{$aggregate->{'arch'}};
+    }
+
     for my $arepoid (@arepoids) {
+    for my $aarch (@aarchs) {
       my $aprp = "$aprojid/$arepoid";
       my $arepo = (grep {$_->{'name'} eq $arepoid} @{$proj->{'repository'} || []})[0];
-      if (!$arepo || !grep {$_ eq $myarch} @{$arepo->{'arch'} || []}) {
-	push @broken, $aprp;
-	next;
-      }
+      #if (!$arepo || !grep {$_ eq $aarch} @{$arepo->{'arch'} || []}) {
+	#push @broken, $aprp;
+	#next;
+      #}
       next if $remoteprojs{$aprojid} || $prpfinished->{$aprp};
       # notready/prpnotready is indexed with source binary names, so we cannot use it here...
-      my $ps = BSUtil::retrieve("$reporoot/$aprp/$myarch/:packstatus", 1);
+      my $ps = BSUtil::retrieve("$reporoot/$aprp/$aarch/:packstatus", 1);
       if (!$ps) {
-	$ps = (readxml("$reporoot/$aprp/$myarch/:packstatus", $BSXML::packstatuslist, 1) || {})->{'packstatus'} || [];
+	$ps = (readxml("$reporoot/$aprp/$aarch/:packstatus", $BSXML::packstatuslist, 1) || {})->{'packstatus'} || [];
 	$ps = { 'packstatus' => { map {$_->{'name'} => $_->{'status'}} @$ps } } if $ps;
       }
       for my $apackid (@apackids) {
@@ -3973,6 +3980,7 @@ sub checkaggregate {
 	  push @blocked, "$aprp/$apackid";
 	}
       }
+    }
     }
   }
   if (@broken) {
@@ -4001,13 +4009,19 @@ sub checkaggregate {
     } else {
       @arepoids = ($repoid);
     }
+    my @aarchs = ($myarch);
+    if ($aggregate->{'arch'}) {
+      @aarchs = @{$aggregate->{'arch'}};
+    }
+
     for my $arepoid (@arepoids) {
       for my $apackid (@apackids) {
+      for my $aarch (@aarchs) {
 	my $m = '';
         if ($remoteprojs{$aprojid}) {
-	  print "fetching remote binary data for $aprojid/$arepoid/$myarch/$apackid\n";
+	  print "fetching remote binary data for $aprojid/$arepoid/$aarch/$apackid\n";
 	  my $param = {
-	    'uri' => "$remoteprojs{$aprojid}->{'remoteurl'}/build/$remoteprojs{$aprojid}->{'remoteproject'}/$arepoid/$myarch/$apackid",
+	    'uri' => "$remoteprojs{$aprojid}->{'remoteurl'}/build/$remoteprojs{$aprojid}->{'remoteproject'}/$arepoid/$aarch/$apackid",
 	    'timeout' => 20,
 	    'proxy' => $proxy,
 	  };
@@ -4019,14 +4033,14 @@ sub checkaggregate {
 	    warn($@);
 	    $error = $@;
 	    $error =~ s/\n$//s;
-	    addretryevent({'type' => 'repository', 'project' => $aprojid, 'repository' => $arepoid, 'arch' => $myarch}) if $error !~ /remote error:/;
+	    addretryevent({'type' => 'repository', 'project' => $aprojid, 'repository' => $arepoid, 'arch' => $aarch}) if $error !~ /remote error:/;
 	    last;
 	  }
 	  for my $binary (@{$binarylist->{'binary'} || []}) {
 	    $m .= "$binary->{'filename'}\0$binary->{'mtime'}/$binary->{'size'}/0\0";
 	  }
 	} else {
-	  my $d = "$reporoot/$aprojid/$arepoid/$myarch/$apackid";
+	  my $d = "$reporoot/$aprojid/$arepoid/$aarch/$apackid";
 	  my @d = grep {$_ eq 'updateinfo.xml' || /\.(?:$binsufsre)$/} ls($d);
 	  for my $b (sort @d) {
 	    my @s = stat("$d/$b");
@@ -4034,8 +4048,9 @@ sub checkaggregate {
 	    $m .= "$b\0$s[9]/$s[7]/$s[1]\0";
 	  }
 	}
-	$m = Digest::MD5::md5_hex($m)."  $aprojid/$arepoid/$myarch/$apackid";
+	$m = Digest::MD5::md5_hex($m)."  $aprojid/$arepoid/$aarch/$apackid";
 	push @new_meta, $m;
+      }
       }
       last if $error;
     }
@@ -4108,15 +4123,22 @@ sub rebuildaggregate {
     }
     my $abinfilter;
     $abinfilter = { map {$_ => 1} @{$aggregate->{'binary'}} } if $aggregate->{'binary'};
+
+    my @aarchs = ($myarch);
+    if ($aggregate->{'arch'}) {
+      @aarchs = @{$aggregate->{'arch'}};
+    }
+
     for my $arepoid (reverse @arepoids) {
       for my $apackid (@apackids) {
+      for my $aarch (@aarchs) {
         my @d;
 	my $cpio;
         my $nosource = exists($aggregate->{'nosources'}) ? 1 : 0;
         my $updateinfo;
         if ($remoteprojs{$aprojid}) {
 	  my $param = {
-	    'uri' => "$remoteprojs{$aprojid}->{'remoteurl'}/build/$remoteprojs{$aprojid}->{'remoteproject'}/$arepoid/$myarch/$apackid",
+	    'uri' => "$remoteprojs{$aprojid}->{'remoteurl'}/build/$remoteprojs{$aprojid}->{'remoteproject'}/$arepoid/$aarch/$apackid",
 	    'receiver' => \&BSHTTP::cpio_receiver,
 	    'directory' => $jobdatadir,
 	    'map' => "upload:",
@@ -4130,7 +4152,7 @@ sub rebuildaggregate {
 	    warn($@);
 	    $error = $@;
 	    $error =~ s/\n$//s;
-	    addretryevent({'type' => 'repository', 'project' => $aprojid, 'repository' => $arepoid, 'arch' => $myarch}) if $error !~ /remote error:/;
+	    addretryevent({'type' => 'repository', 'project' => $aprojid, 'repository' => $arepoid, 'arch' => $aarch}) if $error !~ /remote error:/;
 	    last;
 	  }
 	  for my $bin (@{$cpio || []}) {
@@ -4138,7 +4160,7 @@ sub rebuildaggregate {
 	    push @d, "$jobdatadir/$bin->{'name'}";
 	  }
         } else {
-	  my $d = "$reporoot/$aprojid/$arepoid/$myarch/$apackid";
+	  my $d = "$reporoot/$aprojid/$arepoid/$aarch/$apackid";
 	  $updateinfo = "$d/updateinfo.xml" if -f "$d/updateinfo.xml";
 	  @d = grep {/\.(?:$binsufsre)$/} ls($d);
           @d = map {"$d/$_"} sort(@d);
@@ -4178,6 +4200,7 @@ sub rebuildaggregate {
         for my $bin (@{$cpio || []}) {
 	  unlink("$jobdatadir/$bin->{'name'}");
 	}
+      }
       }
       last if $error;
     }
