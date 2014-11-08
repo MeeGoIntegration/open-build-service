@@ -4178,6 +4178,13 @@ sub rebuildaggregate {
 	  $basename =~ s/.*\///;
 	  $basename =~ s/^upload:// if $cpio;
 	  next if $jobbins{$basename};	# first one wins
+	  # filter incompatible arch binaries
+	  my $iscompat = 0;
+	  for my $arch (keys ($BSCando::knownarch{$r->{'arch'}} || {})) {
+	    $iscompat = grep /^($myarch)$/ , @{$BSCando::cando{$arch}};
+	    last if $iscompat;
+	  }
+	  next unless $iscompat || $r->{'arch'} eq "noarch";
 	  $jobbins{$basename} = 1;
 	  BSUtil::cp($abin, "$jobdatadir/$basename");
 	  $jobrepo->{"$jobdatadir/$basename"} = $r;
