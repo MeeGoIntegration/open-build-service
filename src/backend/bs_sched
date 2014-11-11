@@ -2235,6 +2235,17 @@ sub calc_prps {
 	    # no repository mapping, just use own repoid
 	    push @xsp, "$aprojid/$repoid";
           }
+
+          my @apackids = $agg->{'package'} ? @{$agg->{'package'}} : (sort keys(%{($projpacks->{$aprojid} || {})->{'package'} || {}}));
+          for my $apack (@apackids) {
+            my @aarchs = $agg->{'arch'} ? @{$agg->{'arch'}} : ($myarch);
+            for my $aarch (@aarchs) {
+              if ($aarch ne $myarch) {
+                warn ("$prp $apack needs cross publishing from $aarch");
+                add_crossaggmarker($aarch, $prp, $apack);
+              }
+            }
+          }
 	}
       }
       if (@kiwiinfos) {
@@ -2265,6 +2276,30 @@ sub calc_prps {
   # do the real sorting
   print "sorting projects and repositories...\n";
   @prps = sortpacks(\%prpdeps, undef, undef, @prps);
+}
+
+sub add_crossaggmarker {
+  my ($crossarch, $prp, $packid) = @_;
+  warn("checking if $crossarch is known");
+  return unless $BSCando::knownarch{$crossarch};
+  my $job = jobname($prp, $packid);
+  my $marker = "$jobsdir/$crossarch/$job:$myarch:crossagg";
+  warn("creating cross aggregation marker $marker");
+  return if -e $marker;
+  mkdir_p("$jobsdir/$crossarch");
+  BSUtil::touch($marker);
+}
+
+sub trigger_crossagg {
+  my ($projid, $repoid, $packid) = @_;
+  my $prp = "$projid/$repoid";
+  my $job = jobname($prp, $packid);
+  warn("looking for cross aggregation markers for $job");
+  for my $aarch (map {/^\Q$job\E:(.+?):crossagg$/ ? $1 : ()} ls($myjobsdir)) {
+    warn("found cross agg marker for $job in $aarch , sending rebuild event");
+    my $ev = { type => 'rebuild', 'project' => $projid, 'package' => $packid };
+    sendevent($ev, $aarch, "rebuild:${projid}::${packid}");
+  }
 }
 
 ####################################################################
@@ -2670,6 +2705,9 @@ sub jobfinished {
   unlink("$gdst/:logfiles.fail/$packid");
   unlink($_) for @all;
   rmdir($jobdatadir);
+
+  # a successful build was finished and changed results are in :full so trigger cross aggregation now
+  trigger_crossagg($projid, $repoid, $packid);
 }
 
 sub aggregatefinished {
@@ -3953,10 +3991,7 @@ sub checkaggregate {
       @apackids = sort keys(%{($projpacks->{$aprojid} || {})->{'package'} || {}});
     }
 
-    my @aarchs = ($myarch);
-    if ($aggregate->{'arch'}) {
-      @aarchs = @{$aggregate->{'arch'}};
-    }
+    my @aarchs = $agg->{'arch'} ? @{$agg->{'arch'}} : ($myarch);
 
     for my $arepoid (@arepoids) {
     for my $aarch (@aarchs) {
@@ -4009,10 +4044,8 @@ sub checkaggregate {
     } else {
       @arepoids = ($repoid);
     }
-    my @aarchs = ($myarch);
-    if ($aggregate->{'arch'}) {
-      @aarchs = @{$aggregate->{'arch'}};
-    }
+
+    my @aarchs = $agg->{'arch'} ? @{$agg->{'arch'}} : ($myarch);
 
     for my $arepoid (@arepoids) {
       for my $apackid (@apackids) {
@@ -4124,10 +4157,7 @@ sub rebuildaggregate {
     my $abinfilter;
     $abinfilter = { map {$_ => 1} @{$aggregate->{'binary'}} } if $aggregate->{'binary'};
 
-    my @aarchs = ($myarch);
-    if ($aggregate->{'arch'}) {
-      @aarchs = @{$aggregate->{'arch'}};
-    }
+    my @aarchs = $agg->{'arch'} ? @{$agg->{'arch'}} : ($myarch);
 
     for my $arepoid (reverse @arepoids) {
       for my $apackid (@apackids) {
