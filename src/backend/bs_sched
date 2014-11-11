@@ -2296,7 +2296,7 @@ sub trigger_crossagg {
   my $prp = "$projid/$repoid";
   my $job = jobname($prp, $packid);
   warn("looking for cross aggregation markers for $job");
-  for my $aarch (map {/^\Q$job\E:(.+?):crossagg$/ ? $1 : ()} ls($markersdir/$myarch)) {
+  for my $aarch (map {/^\Q$job\E:(.+?):crossagg$/ ? $1 : ()} ls("$markersdir/$myarch")) {
     warn("found cross agg marker for $job in $aarch , sending rebuild event");
     my $ev = { type => 'rebuild', 'project' => $projid, 'package' => $packid };
     sendevent($ev, $aarch, "rebuild:${projid}::${packid}");
