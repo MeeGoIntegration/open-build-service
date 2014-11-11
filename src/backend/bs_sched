@@ -78,6 +78,7 @@ my $extrepodir = "$bsdir/repos";
 my $extrepodir_sync = "$bsdir/repos_sync";
 my $extrepodb = "$bsdir/db/published";
 my $uploaddir = "$bsdir/upload";
+my $markersdir = "$bsdir/markers";
 my $rundir = $BSConfig::rundir || "$bsdir/run";
 my $infodir = "$bsdir/info";
 
@@ -2283,10 +2284,10 @@ sub add_crossaggmarker {
   warn("checking if $crossarch is known");
   return unless $BSCando::knownarch{$crossarch};
   my $job = jobname($prp, $packid);
-  my $marker = "$jobsdir/$crossarch/$job:$myarch:crossagg";
+  my $marker = "$markersdir/$crossarch/$job:$myarch:crossagg";
   warn("creating cross aggregation marker $marker");
+  mkdir_p("$markersdir/$crossarch");
   return if -e $marker;
-  mkdir_p("$jobsdir/$crossarch");
   BSUtil::touch($marker);
 }
 
@@ -2295,7 +2296,7 @@ sub trigger_crossagg {
   my $prp = "$projid/$repoid";
   my $job = jobname($prp, $packid);
   warn("looking for cross aggregation markers for $job");
-  for my $aarch (map {/^\Q$job\E:(.+?):crossagg$/ ? $1 : ()} ls($myjobsdir)) {
+  for my $aarch (map {/^\Q$job\E:(.+?):crossagg$/ ? $1 : ()} ls($markersdir/$myarch)) {
     warn("found cross agg marker for $job in $aarch , sending rebuild event");
     my $ev = { type => 'rebuild', 'project' => $projid, 'package' => $packid };
     sendevent($ev, $aarch, "rebuild:${projid}::${packid}");
