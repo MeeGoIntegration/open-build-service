@@ -4467,6 +4467,29 @@ sub ping_scheduler {
   }
 }
 
+# utility function to copy project trees when the srcserver is configured with nosharedtrees
+sub copytree {
+  my ($oprojid, $packid, $projid, $rev) = @_;
+
+  my $otreedir = "$treesdir/$oprojid/$packid";
+  my $treedir = "$treesdir/$projid/$packid";
+  my $files = lsrev({ %$rev, 'project' => $oprojid, 'package' => $packid });
+  copyfiles($projid, $packid, $oprojid, $packid, $files);
+  #addmeta($projid, $packid, $files);
+  BSUtil::cp("$otreedir/$rev->{'srcmd5'}-MD5SUMS", "$treedir/$rev->{'srcmd5'}-MD5SUMS") unless -e "$treedir/$rev->{'srcmd5'}-MD5SUMS";
+  local *F;
+  return unless open(F, '<', "$treedir/$rev->{'srcmd5'}-MD5SUMS");
+  my @files = <F>;
+  close F;
+  chomp @files;
+  my $mappings = {map {substr($_, 34) => substr($_, 0, 32)} @files};
+  return unless exists $mappings->{'/SERVICE'};
+  my $smd5 = $mappings->{'/SERVICE'};
+  return unless -e "$otreedir/$smd5-MD5SUMS";
+  return if -e "$treedir/$smd5-MD5SUMS";
+  BSUtil::cp("$otreedir/$smd5-MD5SUMS", "$treedir/$smd5-MD5SUMS");
+}
+
 # copy sources of entire project, project exists ensured by api.
 sub copyproject {
   my ($cgi, $projid) = @_;
@@ -4529,12 +4552,8 @@ sub copyproject {
 	# make trees available in new project
 	my $treedir = $BSConfig::nosharedtrees ? "$treesdir/$projid/$packid" : "$treesdir/$packid";
 	if ($BSConfig::nosharedtrees) {
-	  my $treedir = "$treesdir/$projid/$packid";
 	  for my $rev (@allrevs) {
-	    next if -e "$treedir/$rev->{'srcmd5'}-MD5SUMS";
-	    my $files = lsrev({ %$rev, 'project' => $oprojid, 'package' => $packid });
-	    copyfiles($projid, $packid, $oprojid, $packid, $files);
-	    addmeta($projid, $packid, $files);
+            copytree($oprojid, $packid, $projid, $rev);
 	  }
 	}
 	BSFileDB::fdb_add_multiple("$projectsdir/$projid.pkg/$packid.rev", $srcrevlay, @allrevs);
@@ -4542,14 +4561,19 @@ sub copyproject {
       } else {
 	$lastorev = BSFileDB::fdb_getlast("$projectsdir/$oprojid.pkg/$packid.rev", $srcrevlay);
       }
+      my $files;
       if (!$lastorev || !$lastorev->{'rev'}) {
 	next unless $cgi->{'makeolder'};
 	# fake empty commit
 	$lastorev = { 'version' => 'unknown', 'rev' => 0, 'vrev' => 0, 'srcmd5' => $emptysrcmd5 };
+        $files = lsrev({ %$lastorev, 'project' => $oprojid, 'package' => $packid });
+        copyfiles($projid, $packid, $oprojid, $packid, $files);
+      } else {
+	if ($BSConfig::nosharedtrees) {
+          copytree($oprojid, $packid, $projid, $lastorev);
+        }
       }
       # always do one new commit, we don't use addrev to have full control over vrev
-      my $files = lsrev({ %$lastorev, 'project' => $oprojid, 'package' => $packid });
-      copyfiles($projid, $packid, $oprojid, $packid, $files);
       addmeta($projid, $packid, $files);
       my $newrev = { %$lastorev };
       $newrev->{'user'} = $user;
