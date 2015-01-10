@@ -1473,6 +1473,12 @@ class SourceController < ApplicationController
     oproject = params[:oproject]
     repository = params[:repository]
 
+    unless valid_project_name?(project_name)
+      render_error :status => 400, :errorcode => "invalid_project_name",
+        :message => "invalid project name '#{project_name}'"
+      return
+    end
+
     unless @http_user.is_admin?
       if params[:withbinaries]
         render_error :status => 403, :errorcode => "project_copy_no_permission",
@@ -1486,18 +1492,37 @@ class SourceController < ApplicationController
       end
     end
 
-    # create new project object based on oproject
-    unless DbProject.find_by_name project_name
+    begin
       oprj = DbProject.get_by_name( oproject )
-      p = DbProject.new :name => project_name, :title => oprj.title, :description => oprj.description
-      p.add_user @http_user, "maintainer"
+    rescue DbProject::UnknownObjectError
+      render_error :status => 404, :errorcode => 'project_not_found',
+        :message => "Source project #{oproject} not found"
+      return
+    end
 
-      oprj.flags.each do |f|
-        p.flags.create(:status => f.status, :flag => f.flag, :architecture => f.architecture, :repo => f.repo)
+    # check if new project meta was provided in POST request body
+    request_data = request.raw_post
+    unless request_data.nil?
+      # parse xml structure of uploaded data
+      #rdata = ActiveXML::Base.new(request_data.to_s)
+
+      prj= Project.new(request_data, :name => project_name)
+      if( prj.name != project_name )
+        render_error :status => 400, :errorcode => 'project_name_mismatch',
+          :message => "project name in xml data does not match resource path component"
+        return
       end
+      prj.save
+    end
 
-      p.flags.create(:status => 'disable', :flag => 'build')
-      p.flags.create(:status => 'disable', :flag => 'publish')
+    begin
+      p = DbProject.get_by_name project_name
+    rescue DbProject::UnknownObjectError
+      # create new project object based on oproject
+      p = DbProject.new :name => project_name, :title => oprj.title, :description => oprj.description
+      oprj.flags.each do |f|
+        p.flags.create(:status => f.status, :flag => f.flag, :architecture => f.architecture, :repo => f.repo, :package => f.package)
+      end
 
       oprj.linkedprojects.each do |l|
 
@@ -1515,8 +1540,11 @@ class SourceController < ApplicationController
         end
       end
 
-      p.store
     end
+
+    p.flags.create(:status => 'disable', :flag => 'build')
+    p.flags.create(:status => 'disable', :flag => 'publish')
+    p.store
 
     if params.has_key? :nodelay
       do_project_copy(project_name, params)
