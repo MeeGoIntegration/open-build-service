@@ -1,6 +1,7 @@
 [submodule "src/backend/build"]
 	path = src/backend/build
-	url = git://github.com/openSUSE/obs-build.git
+	url = git@github.com:MeeGoIntegration/obs-build.git
+        branch = jolla_devel_2.3
 [submodule "src/webui/public/themes"]
 	path = src/webui/public/themes
 	url = git://github.com/openSUSE/opensuse-themes.git
